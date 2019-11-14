@@ -1,0 +1,116 @@
+<html>
+
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1.0, maximum-scale=5, minimum-scale=0.5">
+
+		<title>ESP32 Serial Logger</title>
+
+		<link type="text/css" href="styles.css" rel="stylesheet"/>
+
+		<script>
+			function enter_key_pressed(event)
+			{
+				event.preventDefault();
+				if (event.keyCode === 13)
+					login()
+			}
+
+			function login()
+			{
+				user = document.getElementById("uname").value;
+				passw = document.getElementById("psw").value;
+
+				if ((user.length != 0) && (passw.length != 0))
+					websocket_send("login:" + user + " " + passw)
+				else
+					document.getElementById("data_input_label").setAttribute("style", "color: red");
+				
+				if ((user.length == 0) && (passw.length == 0))
+					document.getElementById("data_input_label").innerHTML = "Place user name and password";
+				else if (user.length == 0)
+					document.getElementById("data_input_label").innerHTML = "Place user name";
+				else if (passw.length == 0)
+					document.getElementById("data_input_label").innerHTML = "Place user password";
+			}
+
+			async function websocket_onmessage(evt)
+			{
+				var msg = evt.data;
+
+				// If received data is BIN, transform it to string
+				if(msg instanceof Blob)
+				{
+					msg = await blob_to_sring(msg);
+					if (msg == null)
+						msg = ""
+				}
+
+				var key = msg.substr(0, msg.indexOf(':'));
+				var data = msg.substring(msg.indexOf(':')+1);
+				if(key.length === 0)
+				{
+					key = msg;
+					data = msg;
+				}
+
+				if(key === 'login_ok')
+				{
+					console.log("Websocket from Server data: " + key + ":" + data);
+					document.getElementById("data_input_label").setAttribute("style", "color: green");
+					document.getElementById("data_input_label").innerHTML = "Correct Credentials";
+					load_page('./app_uarts', data)
+				}
+				else if(key === 'login_bad')
+				{
+					console.log("Websocket from Server data: " + key + ":" + data);
+					document.getElementById("data_input_label").setAttribute("style", "color: red");
+					document.getElementById("data_input_label").innerHTML = "Bad Credentials";
+				}
+			}
+
+			async function load_page(url, data)
+			{
+				await sleep(500);
+				http_post(url, {token: data});
+			}
+		</script>
+	</head>
+
+	<body>
+		<div id="header">
+			<label id="header_title">ESP32 Serial Logger</label>
+			<hr width="90%">
+		</div>
+		<div id="content">
+			<div id="container">
+				<h1 id="login_title">Access Authorization</h1>
+				<br>
+				<label class="labels_user_pass"><b>Username</b></label>
+				<input id="uname" type="text" placeholder="Enter User" title="Place here user name..." onkeyup="enter_key_pressed(event)" autofocus required>
+				<br>
+				<label class="labels_user_pass"><b>Password</b></label>
+				<br>
+				<input id="psw" type="password" placeholder="Enter Pass" title="Place here user password..." onkeyup="enter_key_pressed(event)" required>
+				<br>
+				<br>
+				<div id="btn_div">
+					<button id="btn" onclick="login()">Login</button>
+				</div>
+				<br>
+				<p id="data_input_label">Place user and password to login</p>
+				<br>
+			</div>
+		</div>
+		<div id="footer">
+			<div>
+				<hr width="90%">
+				<p class="footer_text" style="color:#FFFFFF">JRios 2019</p>
+				<a class="footer_text" href="https://github.com/J-Rios">Project Code</a>
+			</div>
+		</div>
+
+		<script type="text/javascript" src="script.js"></script>
+	</body>
+
+</html>

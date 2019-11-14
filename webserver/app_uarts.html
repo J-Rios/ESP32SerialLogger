@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1.0, maximum-scale=5, minimum-scale=0.5">
+
+		<title>ESP32 Serial Logger</title>
+
+		<link type="text/css" href="styles.css" rel="stylesheet"/>
+
+		<script>
+
+			var uart_num = 0;
+			var sent_cmds = [];
+			var sent_cmd_i = 0;
+
+			function ButtonMainShell()
+			{
+				if(uart_num != 0)
+				{
+					uart_num = 0;
+					shell_change_header("Changed to Main Shell");
+					document.getElementById("sel_bauds").selectedIndex = 0;
+					document.getElementById("sel_bauds").disabled = true;
+					document.getElementById("sel_eol").disabled = true;
+					menu_set_btn(uart_num);
+				}
+			}
+
+			function ButtonSerial1()
+			{
+				if(uart_num != 1)
+				{
+					uart_num = 1;
+					shell_change_header("Changed to UART1 Shell");
+					document.getElementById("sel_bauds").selectedIndex = 0;
+					document.getElementById("sel_bauds").disabled = false;
+					document.getElementById("sel_eol").disabled = false;
+					menu_set_btn(uart_num);
+				}
+			}
+
+			function ButtonSerial2()
+			{
+				if(uart_num != 2)
+				{
+					uart_num = 2;
+					shell_change_header("Changed to UART2 Shell");
+					document.getElementById("sel_bauds").selectedIndex = 0;
+					document.getElementById("sel_bauds").disabled = false;
+					document.getElementById("sel_eol").disabled = false;
+					menu_set_btn(uart_num);
+				}
+			}
+
+			function ButtonSerial3()
+			{
+				if(uart_num != 3)
+				{
+					uart_num = 3;
+					shell_change_header("Changed to UART3 Shell");
+					document.getElementById("sel_bauds").selectedIndex = 0;
+					document.getElementById("sel_bauds").disabled = false;
+					document.getElementById("sel_eol").disabled = false;
+					menu_set_btn(uart_num);
+				}
+			}
+
+			function shell_clear()
+			{
+				document.getElementById("shell_container").innerHTML = '';
+			}
+
+			function shell_change_header(text)
+			{
+				document.getElementById("shell_container").innerHTML += "\n\n-----------------------------------------------------------\n";
+				document.getElementById("shell_container").innerHTML += "  " + text + "  ";
+				document.getElementById("shell_container").innerHTML += "\n-----------------------------------------------------------\n\n";
+				document.getElementById("cb_autoscroll").checked = true;
+				document.getElementById("shell_container").scrollTop = document.getElementById("shell_container").scrollHeight;
+			}
+
+			function menu_set_btn(btn_num)
+			{
+				document.getElementById("btn_menu_0").className = "";
+				document.getElementById("btn_menu_1").className = "";
+				document.getElementById("btn_menu_2").className = "";
+				document.getElementById("btn_menu_3").className = "";
+
+				if(btn_num === 0)
+					document.getElementById("btn_menu_0").className = "active";
+				else if(btn_num === 1)
+					document.getElementById("btn_menu_1").className = "active";
+				else if(btn_num === 2)
+					document.getElementById("btn_menu_2").className = "active";
+				else if(btn_num === 3)
+					document.getElementById("btn_menu_3").className = "active";
+			}
+
+			function send_box_key_pressed(event)
+			{
+				// Disable default key behaviour
+				event.preventDefault();
+
+				// If arrow up key is pressed
+				if(event.keyCode === 38)
+				{
+					// Recover previous command
+					if(sent_cmd_i > 0)
+					{
+						sent_cmd_i = sent_cmd_i - 1;
+						document.getElementsByName("input_sendbox")[0].value = sent_cmds[sent_cmd_i];
+					}
+				}
+
+				// If arrow down key is pressed
+				if(event.keyCode === 40)
+				{
+					// Recover previous command
+					if(sent_cmd_i < sent_cmds.length-1)
+					{
+						sent_cmd_i = sent_cmd_i + 1;
+						document.getElementsByName("input_sendbox")[0].value = sent_cmds[sent_cmd_i];
+					}
+					else
+					{
+						if(sent_cmd_i == sent_cmds.length-1)
+						{
+							sent_cmd_i = sent_cmd_i + 1;
+							document.getElementsByName("input_sendbox")[0].value = "";
+						}
+					}
+				}
+
+				// If Enter key is pressed
+				if(event.keyCode === 13)
+				{
+					// Get EOL option from selector dropdown box
+					var selector = document.getElementById("sel_eol");
+					var eol_value = selector.options[selector.selectedIndex].value;
+
+					// Get input text to be send to the device
+					var data_text = document.getElementsByName("input_sendbox")[0].value;
+					document.getElementsByName("input_sendbox")[0].value = "";
+
+					// Check and keep to send command in sent array
+					if(data_text != "")
+					{
+						if(sent_cmds.length == 0)
+							sent_cmds[sent_cmds.length] = data_text;
+						else
+						{
+							if(sent_cmds[sent_cmds.length-1] != data_text)
+								sent_cmds[sent_cmds.length] = data_text;
+						}
+						sent_cmd_i = sent_cmds.length;
+					}
+
+					// Enable autoscroll
+					document.getElementById("cb_autoscroll").checked = true;
+
+					// Send the message
+					var to_send = data_text;
+					if(uart_num != 0)
+						to_send = to_send + eol_value;
+					send_to_device_uart(uart_num, to_send);
+				}
+			}
+
+			function sel_bauds_onchange()
+			{
+				// Get Bauds option from selector dropdown box
+				var selector = document.getElementById("sel_bauds");
+				var eol_value = selector.options[selector.selectedIndex].value;
+
+				to_send = "cfg_bauds_uart" + uart_num + ":" + eol_value;
+				websocket_send(to_send);
+			}
+
+			function send_to_device_uart(uart_num, text)
+			{
+				to_send = "uart" + uart_num + ":" + text;
+				websocket_send(to_send);
+			}
+
+			async function websocket_onmessage(evt)
+			{
+				var msg = evt.data;
+
+				// If received data is BIN, transform it to string
+				if(msg instanceof Blob)
+				{
+					msg = await blob_to_sring(msg);
+					if (msg == null)
+						msg = ""
+				}
+				
+				var key = msg.substr(0, msg.indexOf(':'));
+				var data = msg.substring(msg.indexOf(':')+1);
+				if(key.length === 0)
+				{
+					key = msg;
+					data = msg;
+				}
+
+				if(((uart_num == 0) && (key.includes("uart0"))) || ((uart_num == 1) && (key.includes("uart1"))) ||
+				((uart_num == 2) && (key.includes("uart2"))) || ((uart_num == 3) && (key.includes("uart3"))))
+				{
+					console.log("Websocket from Server data: " + key + ":" + data);
+					document.getElementById("shell_container").innerHTML += data;
+					if(document.getElementById("cb_autoscroll").checked == true)
+						document.getElementById("shell_container").scrollTop = document.getElementById("shell_container").scrollHeight;
+				}
+			}
+
+		</script>
+	</head>
+
+	<body>
+		<ul class="menu">
+			<div>
+				<h1 style="padding-left: 5%; color: #E0E0E0">Menu</h1>
+				<hr width="90%">
+				<li><button id="btn_menu_0" onclick="ButtonMainShell()" class="active">MAIN SHELL</button></li>
+				<li><button id="btn_menu_1" onclick="ButtonSerial1()">SERIAL 1</button></li>
+				<li><button id="btn_menu_2" onclick="ButtonSerial2()">SERIAL 2</button></li>
+				<li><button id="btn_menu_3" onclick="ButtonSerial3()">SERIAL 3</button></li>
+			</div>
+		</ul>
+
+		<div class="content">
+			<div id="header">
+				<label id="header_title">ESP32 Serial Logger</label>
+				<hr width="90%">
+			</div>
+			<div id="shell_container"></div>
+			<input id="input_sendbox" name="input_sendbox" placeholder="Send Text..." onkeyup="send_box_key_pressed(event)" autofocus>
+			<div id="div_config_line">
+				<div id="div_config_line_autoscroll">
+					<input type="checkbox" id="cb_autoscroll" value="1" checked> <label for="cb_autoscroll">Autoscroll</label>
+				</div>
+				<div id="div_config_line_eol_bauds_clear">
+					<select id="sel_eol" disabled>
+						<option value="">None</option>
+						<option value="\r">Carriage Return (\r)</option>
+						<option value="\n" selected="selected">Line Feed (\n)</option>
+						<option value="\r\n">CR & LF (\r\n)</option>
+					</select>
+					<select id="sel_bauds" onchange="sel_bauds_onchange()" disabled>
+						<option value="unset" selected="selected">Unset</option>
+						<option value="300">300</option>
+						<option value="1200">1200</option>
+						<option value="2400">2400</option>
+						<option value="4800">4800</option>
+						<option value="9600">9600</option>
+						<option value="19200">19200</option>
+						<option value="38400">38400</option>
+						<option value="57600">57600</option>
+						<option value="74880">74880</option>
+						<option value="115200">115200</option>
+						<option value="230400">230400</option>
+						<option value="250000">250000</option>
+						<option value="500000">500000</option>
+						<option value="1000000">1000000</option>
+						<option value="2000000">2000000</option>
+					</select>
+				</div>
+				<div id="div_btn_clear">
+					<button id="btn_clear" onclick="shell_clear()">Clear</button>
+				</div>
+			</div>
+		</div>
+
+		<script type="text/javascript" src="script.js"></script>
+	</body>
+
+</html>
